@@ -10,6 +10,12 @@ const userRouter = require("./api/users");
 //Initialization
 const server = express();
 
+//error loggin
+if(!process.env.JWT_PRIVATE_KEY){
+    console.error("FATAL ERROR: JWT_PRIVATE_KEY environment variabile not set!");
+    process.exit(1);//exit with 1
+}
+
 //Middlewares
 server.use(express.json()); // get json data
 server.use(express.urlencoded({extended: false})); //get encoded URL
