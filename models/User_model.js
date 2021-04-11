@@ -1,7 +1,9 @@
 const db = require('../config/db');
 const bcrypt = require('bcrypt');
-
+const jwt = require('jsonwebtoken');
+require('dotenv/config'); 
 class User {
+  /**/
 
   constructor(){
     //this.db = require('../config/db');
@@ -97,62 +99,21 @@ class User {
   //-------------------DELETE-------------------
 
 
+  /*-------------------Utility Methods-------------------
+    Non-CRUD functions that are bound to the User object
+    Why? Information Expert Principle                             
+  */
+
+  generateAuthToken(){
+    /*Returns a JWT token based on user  */
+    const token = jwt.sign({id: this.id }, process.env.JWT_PRIVATE_KEY);
+    return token;
+  }
+
+  validateUserData(){}
 
 }
 
-
-//CRUD functions 
-
-//-------------------READ-------------------
-async function getAll(){
-    const data = await db.query('SELECT * FROM users');
-    const meta = {};
-
-    return {
-      data,
-      meta
-    }
-  }
-
-  async function getSingle(email){
-    const sql = 'SELECT * FROM users WHERE email = ? LIMIT 0,1;';
-    const data = await db.query(sql, [email]);
-    const meta = {};
-    
-    return {
-      data,
-      meta
-    }
-  }
-
-  //-------------------CREATE-------------------
-
-  async function create(email, password){
-    const sql = `INSERT INTO users(email, password)
-    VALUES(?, ?);
-    `;
-    const result = await db.query(sql, [email,password]);
-
-    let message = 'Error in creating user...';
-    if (result.affectedRows) {
-        message = 'User created successfully';
-      }
-   // const meta = {};
-    
-    return {
-      message
-    }
-  }
-
-
-  //-------------------UPDATE-------------------
-
-
-  //-------------------DELETE-------------------
-  
   module.exports = {
-    getAll,
-    getSingle,
-    create,
     User
   }

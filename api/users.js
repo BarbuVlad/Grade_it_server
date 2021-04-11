@@ -1,14 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-require('dotenv/config'); 
 
-//const users = require("../models/User_model")
+const auth = require('../middleware/auth');
 const {User} = require("../models/User_model");
 
 /*-----------------GET requests-----------------*/
 
+//READ SINGLE USER BY EMAIL
 router.get('/:email', async (req,res,next) => {
   //create user object
   const user = new User();
@@ -27,20 +26,7 @@ router.get('/:email', async (req,res,next) => {
 
 });
 
-/*
-router.get('/:email', async (req,res,next) => {
-    try {
-      //res.json(await users.getSingle(req.params.email));
-      const data = await users.getSingle(req.params.email);
-      console.log("Email seach...", data);
-      res.json("ok")
-    } catch (err) {
-      console.error(`Error while getting quotes `, err.message);
-      next(err);
-    }
-  
-  });*/
-
+//READ ALL USERS
   router.get('/', async (req,res,next) => {
     //create user object
     const user = new User();
@@ -59,20 +45,9 @@ router.get('/:email', async (req,res,next) => {
   
   });
 
- /* 
-router.get('/', async (req,res,next) => {
-  try {
-    res.json(await users.getAll());
-    console.log("All users seach...");
-  } catch (err) {
-    console.error(`Error while getting quotes `, err.message);
-    next(err);
-  }
-
-});*/
-
 /*-----------------POST requests-----------------*/
 
+//CREATE
 router.post('/', async (req, res, next) =>{
     //create user object
     const user = new User();
@@ -89,9 +64,9 @@ router.post('/', async (req, res, next) =>{
   try {
       const response = await user.create();
       //give adequate response (see method def.)
-      if(response==1){res.status(400).json("User not created (0 rows affected)")}
-      if(response==2){res.status(400).json("User not created (already exists)")}
-      if(response==3){res.status(400).json("User not created (unknown error occurred)")}
+      if(response==1){res.status(400).json({message:"User not created (0 rows affected)", code:401})}
+      if(response==2){res.status(400).json({message:"User not created (already exists)",code:402})}
+      if(response==3){res.status(400).json({message:"User not created (unknown error occurred)", code:401})}
       //else response = 0
       res.status(200).json({message:"User created!", code:201});
       console.log(`Create user with ${req.body}`);
@@ -102,21 +77,6 @@ router.post('/', async (req, res, next) =>{
     }
 });
 
-/*router.post('/', async (req, res, next) =>{
-  if(!req.body.email || !req.body.password){
-    return res.status(400).json({message:'Password or email not provided.'});
-  }
-
-    try {
-        res.json(await users.create(req.body.email, req.body.password));
-        res.status(200);
-        console.log(`Create user with ${req.body}`);
-      } catch (err) {
-        console.error(`Error while posting quotes `, err.message);
-        res.status(503)
-        next(err);
-      }
-});*/
 
 //LOGIN
 router.post('/login', async (req, res, next) =>{
@@ -127,7 +87,6 @@ router.post('/login', async (req, res, next) =>{
 if(!req.body.email || !req.body.password){
   return res.status(400).json({message:'Password or email not provided.', code:401});
 }
-//pass data to object 
 
 //call method to query db
 try {
@@ -143,8 +102,8 @@ try {
     //else -> user exists and password matched = login successfull
     if(valid){ //also send jwt token
 
-      const token = jwt.sign({id: user.id }, process.env.JWT_PRIVATE_KEY);
-      return res.status(200).json({message:'Login successfull!', code:201, token:token});
+      const token = user.generateAuthToken();
+      return res.status(200).json({message:'Login successfull!', code:201, token:token, id:user.id});
     
     }
 
@@ -166,4 +125,5 @@ try {
 
 /*-----------------other requests-----------------*/
 
+//router.post('/',auth, async (req, res, next) =>{
 module.exports = router;
