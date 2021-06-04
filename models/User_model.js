@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const Joi = require('joi'); //returns a class
 require('dotenv/config'); 
 class User {
   /**/
@@ -110,7 +111,29 @@ class User {
     return token;
   }
 
-  validateUserData(){}
+  static validateUserData(user){
+    /*Validates user parameter; in JS object format {...}
+      email: string in email format (2 min. domains like: exemple.com)
+      password: string between 5 and 60 chars
+      
+      *The function returns the error message or
+      null if no error was found
+
+      For the parameter pass the actual object attributes
+      or variabiles that must respect validation 
+
+      */
+    const schema = Joi.object({
+      email: Joi.string().required().email({minDomainSegments: 2, tlds: {allow: false} }),
+      password: Joi.string().min(5).max(60).required(),
+
+    });
+
+    const result = schema.validate(user);
+    if(result.error){return result.error.details[0].message}//
+    return null;
+
+  }
 
 }
 

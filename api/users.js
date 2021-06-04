@@ -53,9 +53,12 @@ router.post('/', async (req, res, next) =>{
     const user = new User();
   
   //check request body 
-  if(!req.body.email || !req.body.password){
-    return res.status(400).json({message:'Password or email not provided.'});
+  const validateError = User.validateUserData({email: req.body.email, password: req.body.password})
+  if(validateError){
+    return res.status(400).json({message:validateError, code:403});
   }
+  
+
   //pass data to object 
   user.email = req.body.email;
   user.password = req.body.password;

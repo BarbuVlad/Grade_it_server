@@ -2,6 +2,7 @@
 const express = require("express");
 const cors = require("cors");
 require('dotenv/config');   
+const HttpException = require('http-exception')
 
 const {logger} = require('./middleware/logger');
 
