@@ -8,6 +8,7 @@ const {logger} = require('./middleware/logger');
 
 const postRouter = require("./api/posts");
 const userRouter = require("./api/users");
+const classRouter = require("./api/classes");
 //Initialization
 const server = express();
 
@@ -33,6 +34,7 @@ server.get('/', (req, res) => {
 
 server.use('/posts', postRouter);
 server.use('/users', userRouter);
+server.use('/classes', classRouter);
 // 404 error
 server.all('*', (req, res, next) => {
     const err = new HttpException(404, 'Endpoint Not Found');

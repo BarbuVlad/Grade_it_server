@@ -6,6 +6,7 @@ const {auth} = require('../middleware/auth');
 const {User} = require("../models/User_model");
 const {SignUp} = require("../models/Sign_up_model");
 const {Post} = require("../models/Post_model");
+const { Class } = require('../models/Class_model');
 
 /*-----------------GET requests-----------------*/
 
@@ -81,7 +82,37 @@ router.get('/feed', [auth],async (req,res,next) => {
       console.error(`Error while getting quotes `, err.message);
       next(err);
     }
-  
+  });
+
+  router.get('/classes', [auth], async (req,res) => {
+    //create sign up object 
+    const signUp = new SignUp();
+    const _class = new Class();
+    const user = new User();
+
+    //call method to query db
+    try {
+      //get all sign ups for this user
+      const response = await signUp.getAllById(userId=req.user.id);
+      if(!response){res.status(404).json({message:"No classes found", code:1})}
+      //for every sign up get class details (id, id_owner, name, desciption, name of owner*)
+      await Promise.all(response.map( async (item) => {
+        //get class info
+        const class_data = await _class.getById(item["id_class"]);
+        //TODO: treat error codes and log events in system (important: sign-up exists but class does not. Don't retrun it, data inconsistency)
+        item["class_name"] = _class.name;
+        item["class_description"] = _class.description;
+        item["id_owner"] = _class.id_owner;
+        //extarct owner name (email)
+        const owner_data = await user.getSingle(null, _class.id_owner);///< extarct by id
+        //id_owner is FK in class, data inconsistency is guaranteed by DB
+        item["owner_name"] = user.email;
+      }));
+      res.status(200).json({message:response, code:0});
+    } catch (err) {
+      console.error(`Error at getting classes `, err.message);
+      res.status(500).json({message:"Error occurred", code:2});
+    }
   });
 
 /*-----------------POST requests-----------------*/

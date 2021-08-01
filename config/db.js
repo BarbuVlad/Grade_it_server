@@ -11,8 +11,12 @@ const pool = mysql.createPool({
 });
 
 async function query(sql, params) {
+   // try{
     const [rows, fields] = await pool.execute(sql, params);
     return rows;
+    // } catch(err){
+    //     console.error("Failed DB query execution... \n", err);
+    // }
 }
 
 module.exports = { 

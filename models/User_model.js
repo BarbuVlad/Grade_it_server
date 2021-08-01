@@ -29,14 +29,32 @@ class User {
     }
   }
 
-  async getSingle(email){
-    /*Function modifies object attributes*/
-    //validate data
+  async getSingle(email=null, id=null){
+    /*Function modifies object attributes
+    Will extarct one row for either email or id
+    based on which one is not null.
 
+    > If both params are not null, -1 err. code is returned
+    > IF both params are null, -1 err. code is returned
+    */
+    //verify parameters
+    if(isNaN(Number(id))){
+      return -1;
+    }
+    if( (email===null && id===null) || (email!==null && id!==null) ){
+      return -1;
+    }
     //make query
-    const sql = 'SELECT id, email, password FROM users WHERE email = ? LIMIT 0,1;';
-    const data = await db.query(sql, [email]);
+    let sql;
+    email!==null && id===null ?
+     sql = 'SELECT id, email, password FROM users WHERE email = ? LIMIT 0,1;' 
+     :
+     sql = 'SELECT id, email, password FROM users WHERE id = ? LIMIT 0,1;';
     
+     let data
+     email!==null ? data = await db.query(sql, [email]) : null;
+     id!==null ? data = await db.query(sql, [id]) : null;
+     //console.log("HERE", data);
     //Pass data to object
     if(!data.length){return false;}
 
