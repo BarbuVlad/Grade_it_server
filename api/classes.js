@@ -5,13 +5,28 @@ const {auth} = require('../middleware/auth');
 const {authClass} = require('../middleware/authClass');
 const {Class} = require("../models/Class_model");
 const {SignUp} = require("../models/Sign_up_model");
+const {Post} = require("../models/Post_model");
 /*! Every Class instance will be named _class NOT class, as the latter is a reserved keyword*/
 
 /* GET routes */
 router.get('/posts', [auth, authClass], async (req, res) => {
-    res.status(200).json({message:"All auth is in order", code:0});
-    console.log(req.user);
-    console.log(req.class);
+    //res.status(200).json({message:"All auth is in order", code:0});
+    const post = new Post();
+    let posts = []
+
+    let p_raw = await post.getAllByClassId(req.class.id_class, 20);///< should modify to limit by date not raw number of entries
+    if( !(p_raw==false || p_raw==-1 || p_raw==-2) ){///<this event should be logged
+    posts = await Promise.all(Object.values(JSON.parse(JSON.stringify(p_raw))));
+    } else{}
+
+    if(posts.length==0){
+        return res.status(200).json({"message":"No feed!", code:3});
+    }
+    posts.sort((a, b) => a.date_time < b.date_time ? 1 : -1);
+    return res.status(200).json({"message":"User feed extracted successfully!", code:0, posts:posts});
+
+    //console.log(req.user);
+    //console.log(req.class);
 
 });
 
@@ -73,32 +88,30 @@ router.post('/join', [auth], async (req,res,next) => {
     }
 });
 
-router.delete('/leave_class', [auth], async (req,res) => {
+router.delete('/leave_class', [auth,authClass], async (req,res) => {
     /* Will delete sign up entry from DB for user id extracted from token*/
-    //vertify body
-    if(!req.body.class_id){
-        res.status(400).json({message:"Class id is missing", code:1});
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
         return;
     }
 
-    //create class instance
+    //create signUp instance
     const signUp = new SignUp();
-    signUp.id_user = req.user.id;
-    signUp.id_class = req.body.class_id;
+    signUp.id_user = req.class.id_user;
+    signUp.id_class = req.class.id_class;
 
     const result = await signUp.delete();
     if (result === 0){
-        res.status(200).json({message:"Successfull sign up!", code:0});
+        res.status(200).json({message:"Left class successfully!", code:0});
         return;
     }
+    if(result === 1){
+        return res.status(400).json({message:"Sign up not found. Error", code:2});
+    }
     if(result === 2){
-        return res.status(400).json({message:"Sign up failed. Bad class id", code:2});
-    }
-    if(result === 3){
-        return res.status(400).json({message:"User already registered to class", code:3});
-    }
-    if (result === 1 || result === 4){
-        return res.status(500).json({message:"Sign up failed. Server error", code:4});
+        return res.status(400).json({message:"Error occurred", code:3});
     }
 });
 
@@ -135,7 +148,7 @@ router.post('/authorization', [auth], async (req, res, next) =>{
         signUp.id_user = response[0].id_user;
         signUp.role = response[0].role;
         const token = signUp.generateAuthToken();
-        return res.status(200).json({message:'Class auth successfull!', code:0, token:token, data_singUp:response[0]});
+        return res.status(200).json({message:'Class auth successfull!', code:0, token:token, data_signUp:response[0]});
       }
       if(response === -1 || response === -2){///< known error returned
         //(TODO log event)

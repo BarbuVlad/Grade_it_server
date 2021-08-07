@@ -26,7 +26,7 @@ const authClass = (req, res, next) => {
         //if(decodedPayload.id_class !== class_id){
         //    res.status(401).json({message:"Access denied. Bad class id header - token combination", code:-15});
         //}
-        req.class = decodedPayload;//for now just the id
+        req.class = decodedPayload;
         next();
     } catch (err){
         res.status(401).json({message:"Access denied. Bad class token", code:-13});
