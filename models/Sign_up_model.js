@@ -68,7 +68,7 @@ class SignUp {
       //make query
       try{
           const result = await db.query(sql, [this.id_user,this.id_class, this.role]);
-          console.log("----->",result);
+          //console.log("----->",result);
           if (result.affectedRows) {
           return 0; //successfull
           } else {

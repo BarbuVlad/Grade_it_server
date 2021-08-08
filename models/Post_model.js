@@ -44,6 +44,44 @@ class Post {
     }
   }
 
+    //-------------------CREATE-------------------
+    async create(){
+      /*Function uses object attributes
+          Returned codes:
+          0 = success
+          1 = rows not affected
+          2 = FK constain fail (1452 mysql err code)
+          3 = other error
+      */
+      
+      //prepare query
+      const sql = `INSERT INTO ${Post.TABLE_NAME}(date_time, id_class, author, title, body)
+      VALUES(?, ?, ?, ?, ?);
+      `;
+      this.date_time===undefined ? this.date_time=null : null;
+      this.id_class === undefined ? this.id_class=null : null;
+      this.author === undefined ? this.author=null : null;
+      this.title === undefined ? this.title=null : null;
+      this.body === undefined ? this.body=null : null;
+      //make query
+      try{
+          const result = await db.query(sql, [this.date_time, this.id_class, this.author, this.title, this.body]);
+          console.log("----->",result);
+          if (result.affectedRows) {
+          return 0; //successfull
+          } else {
+              return 1;//un-successfull
+          }
+      }catch(err){
+          if(err.errno==1452){
+              return 2; //FK missing
+          }
+          return 3; //other error occured
+      }
+
+      }
+  
+
 
 }
 

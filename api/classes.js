@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const moment = require('moment');
 
 const {auth} = require('../middleware/auth');
 const {authClass} = require('../middleware/authClass');
-const {Class} = require("../models/Class_model");
-const {SignUp} = require("../models/Sign_up_model");
-const {Post} = require("../models/Post_model");
+const { Class } = require("../models/Class_model");
+const { SignUp } = require("../models/Sign_up_model");
+const { Post } = require("../models/Post_model");
+const { User } = require('../models/User_model');
 /*! Every Class instance will be named _class NOT class, as the latter is a reserved keyword*/
 
 /* GET routes */
@@ -44,13 +46,22 @@ router.post('/create', [auth], async (req,res,next) => {
     _class.name = req.body.name;
     _class.description = req.body.description;
 
+    //create singUp instance
+    const signUp = new SignUp(); 
+
     if(req.body.invites){
         console.log("Invites send: ",req.body.invites);
     }
     const result = await _class.create();
     if (result[0] === 0){
+        signUp.id_user = req.user.id;
+        signUp.id_class = result[1];
+        signUp.role = "owner";
+
+        const x = await signUp.create();
+        if (x===0)  {
         res.status(200).json({message:"Class created successfully!", code:0, classId:result[1]});
-        return;
+        return;     }
     }
     if(result === 2){
         return res.status(400).json({message:"Class not created. User does not exist!", code:2});
@@ -58,6 +69,8 @@ router.post('/create', [auth], async (req,res,next) => {
     if (result === 1 || result === 3){
         return res.status(500).json({message:"Class not created", code:3});
     }
+    return res.status(500).json({message:"ERROR occurred. Check server logs", code:4});
+
 });
 router.post('/join', [auth], async (req,res,next) => {
     //vertify body
@@ -162,5 +175,51 @@ router.post('/authorization', [auth], async (req, res, next) =>{
       next(err);
     }
   });
+
+  router.post('/create_post', [auth,authClass], async (req,res) => {
+    /* Will add a new post based on id(s) extacted from tokens*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(!req.body.title){
+        res.status(400).json({message:"Post title cannot be empty!", code:2});
+        return;
+    }
+    //extarct author name
+    let author = null;
+    if(req.query.anonymity==="false"){
+        const user = new User();
+        const find_user = await user.getSingle(email=null, id=req.user.id);
+        if(find_user === true){
+            author = user.email;
+        }
+    }
+
+    //create signUp instance
+    const post = new Post();
+    post.date_time = moment().format('YYYY-MM-DD HH:mm:SS');
+    post.id_class = req.class.id_class;
+    post.author = author;
+    post.title = req.body.title;
+    post.body = req.body.body;
+
+    const result = await post.create();
+    if (result === 0){
+        res.status(200).json({message:"Post created successfully!", code:0});
+        return;
+    }
+    if(result === 1){
+        return res.status(500).json({message:"ERROR. Post not created", code:3});
+    }
+    if(result === 2){
+        return res.status(400).json({message:"Error occurred. Class not found", code:4});
+    }
+    if(result === 3){
+        return res.status(500).json({message:"Error occurred", code:4});
+    }
+});
 
 module.exports = router;
