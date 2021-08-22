@@ -32,7 +32,7 @@ class SignUp {
         return -1;
     }
 
-    let sql = `SELECT id_user, id_class, role FROM ${SignUp.TABLE_NAME}`;
+    let sql = `SELECT id_user, id_class, role, confirmed, blocked FROM ${SignUp.TABLE_NAME}`;
     //integrate condition
     (classId==null && userId==null) ? sql += ` WHERE 1;` : null;
     (classId==null && userId!=null) ? sql += ` WHERE id_user=${userId};` : null;
@@ -115,6 +115,47 @@ class SignUp {
             return 2; //other error occured
         }
   
+        }
+
+        async block(block_=true){
+          /* */
+
+          //prepare query
+          const sql = `UPDATE ${SignUp.TABLE_NAME} SET blocked = ? WHERE id_user=? AND id_class=?;`;
+          this.id_user===undefined ? this.id_user=null : null;
+          this.id_class===undefined ? this.id_class=null : null;
+
+          try{
+            const result = await db.query(sql, [block_, this.id_user, this.id_class]);
+            if(result.affectedRows){
+              return 0; //successfull
+            } else {
+                return 1;//un-successfull
+            }
+          } catch(err){
+            console.log(err);
+            return 2;
+          }
+        }
+
+        async changeRole(role="student"){
+          /*Used in invitation accepting */
+          //prepare query
+          const sql = `UPDATE ${SignUp.TABLE_NAME} SET role = ? WHERE id_user=? AND id_class=?;`;
+          this.id_user===undefined ? this.id_user=null : null;
+          this.id_class===undefined ? this.id_class=null : null;
+
+          try{
+            const result = await db.query(sql, [role, this.id_user, this.id_class]);
+            if(result.affectedRows){
+              return 0; //successfull
+            } else {
+                return 1;//un-successfull
+            }
+          } catch(err){
+            console.log(err);
+            return 2;
+          }
         }
 
         /* ! IS JWT auth needed? It is faster than an check-DB every time approch (being an IO op.) */

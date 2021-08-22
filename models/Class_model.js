@@ -77,9 +77,9 @@ class Class {
             }
             return 3; //other error occured
         }
-
         }
 
+    
 }
 
   module.exports = {

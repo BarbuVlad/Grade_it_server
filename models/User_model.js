@@ -50,7 +50,7 @@ class User {
      sql = 'SELECT id, email, password FROM users WHERE email = ? LIMIT 0,1;' 
      :
      sql = 'SELECT id, email, password FROM users WHERE id = ? LIMIT 0,1;';
-    
+
      let data
      email!==null ? data = await db.query(sql, [email]) : null;
      id!==null ? data = await db.query(sql, [id]) : null;

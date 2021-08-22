@@ -32,6 +32,35 @@ router.get('/posts', [auth, authClass], async (req, res) => {
 
 });
 
+router.get('/members', [auth, authClass], async (req, res) => {
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        return;
+    }
+    //get all sing-ups
+    const singUp = new SignUp();
+    let members = await singUp.getAllById(userId=null, classId=req.class.id_class);
+    if(members == false || members==-1 || members==-2){
+        return res.status(500).json({"message":"Error at extracting. Empty list", code:2})
+    }
+    const user = new User();
+    await Promise.all(members.map( async (member) => {
+        let u_res = await user.getSingle(email=null, id=member.id_user);
+        if( !(u_res==false || u_res==-1) ){///<this event should be logged
+          member["email"]=user.email;
+        } else{}
+      }));
+
+    if(req.query.sort==="true"){
+        members.sort((a, b) => a.email > b.email ? 1 : -1);
+    }
+    return res.status(200).json({"message":"Class members extracted successfully!", code:0, members:members});
+
+    //console.log(req.user);
+    //console.log(req.class);
+
+});
+
 /* POST classes */
 router.post('/create', [auth], async (req,res,next) => {
     //vertify body
@@ -203,6 +232,7 @@ router.post('/authorization', [auth], async (req, res, next) =>{
     post.date_time = moment().format('YYYY-MM-DD HH:mm:SS');
     post.id_class = req.class.id_class;
     post.author = author;
+    post.author_id = req.class.id_user;
     post.title = req.body.title;
     post.body = req.body.body;
 
@@ -218,8 +248,106 @@ router.post('/authorization', [auth], async (req, res, next) =>{
         return res.status(400).json({message:"Error occurred. Class not found", code:4});
     }
     if(result === 3){
-        return res.status(500).json({message:"Error occurred", code:4});
+        return res.status(500).json({message:"Error occurred", code:5});
+    }
+});
+
+router.delete('/delete_post', [auth,authClass], async (req,res) => {
+    /* Will add a new post based on id(s) extacted from tokens*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(!req.body.date_time){
+        res.status(400).json({message:"Post date_time cannot be empty!", code:2});
+        return;
+    }
+
+    //create post instance
+    const post = new Post();
+    post.date_time = req.body.date_time;
+    post.id_class = req.class.id_class;
+
+    //verify role
+    if(req.class.role==="student"){//can only delete own posts
+
+        const posts_list = await post.getByAuthorIdAndClassId(author_id=req.class.id_user, 
+                                                        date_time= req.body.date_time,
+                                                        classId=req.class.id_class);
+        if(posts_list === false || posts_list === -1 || posts_list === -2){
+            return res.status(500).json({message:"Server error occurred", code:3});
+        }
+        if(posts_list.length !== 1){
+            return res.status(400).json({message:"Error at selecting post of user...", code:4});
+        }
+    }
+
+
+    const result = await post.delete();
+    if (result === 0){
+        res.status(200).json({message:"Post deleted successfully!", code:0});
+        return;
+    }
+    if(result === 1){
+        return res.status(400).json({message:"ERROR. Post not deleted", code:5});
+    }
+    if(result === 2){
+        return res.status(500).json({message:"Error occurred", code:6});
+    }
+});
+
+router.patch('/revoke_access', [auth,authClass], async (req,res) => {
+    //sync tokens
+    console.log(req.class);
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        return;
+    }
+    if(req.class.role !== "owner" && req.class.role !== "teacher"){
+        res.status(403).json({message:"No authority to modify this data", code:2});
+        return;
+    }
+    if(!req.body.user_id){
+        res.status(400).json({message:"User id cannot be empty!", code:3});
+        return;
+    }
+    //create signUp instance
+    const singUp = new SignUp();
+    singUp.id_user=req.body.user_id;
+    singUp.id_class=req.class.id_class;
+    //read signUp from DB
+    const to_kick =  await singUp.getAllById(userId=req.body.user_id, classId=req.class.id_class);
+    if(to_kick ===-1 || to_kick===-2 || to_kick===false){
+       return res.status(500).json({message:"Error at extracting user sing up", code:4});
+    }
+
+    //owner cannot be blocked; teacher cannot block other teachers
+    if(to_kick[0]["role"] === "owner" || (req.class.role === "teacher" && to_kick[0]["role"] === "teacher") ){
+        res.status(403).json({message:"No authority to modify this data", code:5});
+        return;
+    }
+
+    let action = false;
+    req.query.action === "block" ? action = true : action = false;
+    const result = await singUp.block(action);
+
+    if (result === 0){
+        res.status(200).json({message:"User block action successfull!", code:0});
+        return;
+    }
+    if(result === 1){
+        return res.status(500).json({message:"ERROR. Block action not created", code:6});
+    }
+    if(result === 2){
+        return res.status(500).json({message:"Error occurred", code:7});
     }
 });
 
 module.exports = router;
+
+/*
+const nodemailer = require("nodemailer");
+
+*/
