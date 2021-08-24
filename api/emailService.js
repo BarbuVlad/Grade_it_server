@@ -43,7 +43,7 @@ router.post('/sendInvite', [auth, authClass], async (req, res) => {
     const user = new User();
     const res_ = await user.getSingle(email=req.body.email);
     if(res_ === false){
-        return res_.status(400).json({message:"User with this email does not exist", code:4});
+        return res.status(400).json({message:"User with this email does not exist", code:4});
     }
 
     //create an invite jwt token 

@@ -32,6 +32,50 @@ router.get('/posts', [auth, authClass], async (req, res) => {
 
 });
 
+/* GET routes */
+router.get('/general_info', [auth, authClass], async (req, res) => {
+    /*To return: 
+    - name of class
+    - class id
+    - class description
+    - number of members and number of types
+    - owner email */
+    const class_ = new Class();
+    let _get = await class_.getById(classId=req.class.id_class);
+    if(_get!==0){
+        return res.status(500).json({"message":"Error at getting class information", code:1});
+    }
+
+    //get owner email 
+    const user = new User();
+    _get = await user.getSingle(email=null, id=class_.id_owner);
+    if(_get===false){
+        return res.status(500).json({"message":"Error at getting class information", code:2});
+    }
+
+    //get number of members
+    const signUp = new SignUp();
+    const members = await signUp.getAllById(userId=null, classId=class_.id);
+    if(typeof(members)!=="object"){
+        return res.status(500).json({"message":"Error at getting class information", code:3});
+    }
+
+    let students = 0;
+    let teachers = 1;
+    for(let i = 0; i<members.length; i++){
+        if(members[i].role === "student"){
+            students++;
+        } else if(members[i].role === "teacher"){
+            teachers++;
+        }
+    }
+
+    let info = {"name":class_.name, "description":class_.description, "head_teacher":user.email, "members":members.length,
+    "students":students, "teachers":teachers}
+    return res.status(200).json({"message":"Class info extracted successfully!", code:0, info:info});
+
+});
+
 router.get('/members', [auth, authClass], async (req, res) => {
     if(req.user.id !== req.class.id_user){
         res.status(400).json({message:"Authorization conflict error", code:1});
@@ -186,6 +230,11 @@ router.post('/authorization', [auth], async (req, res, next) =>{
   
       //response is an array => data was retured
       if(typeof(response) === "object"){ //also send jwt token
+        console.log(response[0]);
+        if(response[0].blocked == 1) {
+            console.log(response[0].blocked);
+            return res.status(400).json({message:'User has been blocked', code:5})
+        }
         signUp.id_class = response[0].id_class;
         signUp.id_user = response[0].id_user;
         signUp.role = response[0].role;
