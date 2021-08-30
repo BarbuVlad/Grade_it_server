@@ -8,6 +8,10 @@ const { Class } = require("../models/Class_model");
 const { SignUp } = require("../models/Sign_up_model");
 const { Post } = require("../models/Post_model");
 const { User } = require('../models/User_model');
+const { Test } = require('../models/Test_model');
+const { TestOwner } = require('../models/Test_owner_model');
+const { TestClass } = require('../models/Test_class_model');
+const { Schedule } = require('../models/Schedule_model');
 /*! Every Class instance will be named _class NOT class, as the latter is a reserved keyword*/
 
 /* GET routes */
@@ -392,6 +396,161 @@ router.patch('/revoke_access', [auth,authClass], async (req,res) => {
     if(result === 2){
         return res.status(500).json({message:"Error occurred", code:7});
     }
+});
+//TESTS:
+router.post('/create_test', [auth,authClass], async (req,res) => {
+    /* Will create a new test, will generate 2 aditional entries in bridge tables:
+        test_owner - to assign ownership of test
+        test_class - to assign a test to a class*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(req.class.role !== "owner" && req.class.role !== "teacher"){
+        res.status(403).json({message:"No authority to create this data", code:2});
+        return;
+    }
+    if(!req.body.questions){
+        res.status(400).json({message:"Question list cannot be empty!", code:3});
+        return;
+    }
+
+    //create a test 
+    const test = new Test();
+    req.body.title != undefined ? test.name=req.body.title : null;
+    req.body.description != undefined ? test.description=req.body.description : null;
+    test.questions = req.body.questions;
+
+    const test_result = await test.create();
+    if(test_result == 1 || test_result == 2){
+        return res.status(500).json({message:"Error at creating test!", code:4});
+    }
+    //create ownership
+    const testOwner = new TestOwner();
+    testOwner.id_user = req.class.id_user;
+    testOwner.id_test = test_result[1];
+
+    const testOwner_result = await testOwner.create();
+    if (testOwner_result !== 0){
+        return res.status(500).json({message:"Error at creating test (ownership)!", code:5});
+    }
+    //create class assignment (ownership to class)
+    const testClass = new TestClass();
+    testClass.id_test = test_result[1];
+    testClass.id_class = req.class.id_class;
+
+    const testClass_result = await testClass.create();
+    if(testClass_result !== 0){
+        return res.status(500).json({message:"Error at creating test (class assign)!", code:6});
+    }
+
+    return res.status(200).json({message:"Test created successfully!", code:0});
+});
+
+router.get('/view_tests', [auth,authClass], async (req,res) => {
+    /* Used to view all tests that are part of this class*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(req.class.role !== "owner" && req.class.role !== "teacher"){
+        res.status(403).json({message:"No authority to view this data", code:2});
+        return;
+    }
+
+    //read all tests (non-questions info) from DB for this class
+    const testClass = new TestClass();
+
+    let testsAvailable = await testClass.getAllById(classId=req.class.id_class, testId=null);
+    if(testsAvailable === false){
+        return res.status(200).json({message:"This class has no tests available...", code:3});
+    }
+    //extract more information
+    const test = new Test();
+    await Promise.all(testsAvailable.map( async (test_entry) => {
+        let t_res = await test.getByIdNoQuestions(testId=test_entry.id_test)
+        if( !(t_res===false || t_res==2) ){///<this event should be logged
+            test_entry["name"]=test.name;
+            test_entry["description"]=test.description;
+            //TODO: extaract name of creator/owner
+        } else{}
+      }));
+
+    return res.status(200).json({message:"List of available test extarcted!", code:0, tests:testsAvailable});
+});
+
+router.post('/set_test_schedule', [auth,authClass], async (req,res) => {
+    /* Will set a date for a test to take place
+    Expect date in format: 2021-09-24T12:13 */
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(req.class.role !== "owner" && req.class.role !== "teacher"){
+        res.status(403).json({message:"No authority to modify this data", code:2});
+        return;
+    }
+    if(!req.body.startDate || !req.body.endDate || !req.body.testId){
+       return res.status(400).json({message:"Data missing (start-end dates or test id)", code:3});
+    }
+    //verify if dates are in order
+    let startDate = new Date(req.body.startDate);
+    let endDate = new Date(req.body.endDate);
+    if(startDate>=endDate){
+        return res.status(400).json({message:"Start date cannot be before end date!", code:4});
+    }
+    //TODO: !SECURITY - is test part of this class? (read from test_class table)
+    //create the schedule
+    const schedule = new Schedule();
+    schedule.id_class = req.class.id_class;
+    schedule.id_test = req.body.testId;
+    schedule.date_time_start = req.body.startDate;
+    schedule.date_time_end = req.body.endDate;
+
+    let createSchedule = await schedule.create();
+    if(createSchedule === 3){
+        return res.status(200).json({message:"This test is already scheduled for class.", code:5});
+    }
+    if(createSchedule === 0){
+        return res.status(200).json({message:"Test schedule created!", code:0});
+    }
+    return res.status(500).json({message:"Error occurred!", code:6});
+});
+
+router.get('/view_test', [auth,authClass], async (req,res) => {
+    /* Will return all data regarding test*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(req.class.role !== "owner" && req.class.role !== "teacher"){
+        res.status(403).json({message:"No authority to view this data", code:2});
+        return;
+    }
+    if(isNaN(Number(req.query.test_id))){
+        res.status(400).json({message:"Bad test id", code:3});
+        return;
+    }
+    //extarct information
+    const test = new Test();
+    const getTest = await test.getById(testId=req.query.test_id);
+    if(getTest === 1 || getTest===false || getTest===2){
+        return res.status(500).json({message:"Some error occurred", code:4});
+    }
+
+    if(getTest === 0){
+        return res.status(200).json({message:"Test extarcted", code:0, questions:test.questions});
+    }
+
+    return res.status(500).json({message:"Error occurred!", code:5});
 });
 
 module.exports = router;
