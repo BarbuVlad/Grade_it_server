@@ -24,7 +24,6 @@ class TestClass {
         - testId=X, classId=null    => return all data fro that test_id
         - testId=X, classId=Y       => return 1 entry if it exists
         *if no data exists, false is returned
-    
     */
     //verify parameters
     if( isNaN(Number(testId)) || isNaN(Number(classId))){

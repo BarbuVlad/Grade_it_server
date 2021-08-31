@@ -81,8 +81,7 @@ class Test {
             Returned codes:
             0 = success
             1 = rows not affected
-            2 = FK constain fail (1452 mysql err code)
-            3 = other error
+            2 = other error
         */
         
         //prepare query
@@ -107,7 +106,33 @@ class Test {
             // }
             return 2; //other error occured
         }
+    }
+
+    async modifyQuestions(){
+        /*Function uses object attributes
+            Returned codes:
+           -1 = test id cannot be null
+            0 = success
+            1 = rows not affected
+            2 = other error
+        */
+        //prepare query
+        const sql = `UPDATE ${Test.TABLE_NAME} SET questions = ? WHERE id = ?;`;
+        if(this.id===undefined || this.id===null){return -1;}
+        this.questions===undefined ? this.questions=null : null;
+        //make query
+        try{
+            const result = await db.query(sql, [this.questions, this.id]);
+            //console.log("----->",result);
+            if (result.affectedRows) {
+            return 0; //successfull
+            } else {
+                return 1;//un-successfull
+            }
+        }catch(err){
+            return 2; //other error occured
         }
+    }
 }
 
   module.exports = {

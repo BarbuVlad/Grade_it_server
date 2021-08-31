@@ -24,6 +24,7 @@ class TestOwner {
         - testId=X, userId=null    => return all data fro that test_id
         - testId=X, userId=Y       => return 1 entry if it exists
         *if no data exists, false is returned
+        **For now only 1 user can own a test TODO: share test ownership
     
     */
     //verify parameters

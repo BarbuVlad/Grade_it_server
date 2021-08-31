@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const moment = require('moment');
+const jwt = require('jsonwebtoken');
+require('dotenv/config');
 
 const {auth} = require('../middleware/auth');
 const {authClass} = require('../middleware/authClass');
@@ -448,6 +450,42 @@ router.post('/create_test', [auth,authClass], async (req,res) => {
 
     return res.status(200).json({message:"Test created successfully!", code:0});
 });
+router.patch('/edit_test', [auth,authClass], async (req,res) => {
+    /* Will edit existing test*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(req.class.role !== "owner" && req.class.role !== "teacher"){
+        res.status(403).json({message:"No authority to create this data", code:2});
+        return;
+    }
+    if(!req.body.questions || !req.body.test_id){
+        res.status(400).json({message:"Missing question list or testId!", code:3});
+        return;
+    }
+
+    //is this test assigned to this class? 
+    const testClass = new TestClass();
+    const testClassOwn = await testClass.getAllById(classId=req.class.id_class, testId=req.body.test_id);
+    if(testClassOwn===false || testClassOwn===-1 || testClassOwn===-2){
+        res.status(400).json({message:"Test does not exist or is not assigned to class", code:4});
+        return;
+    }
+    //edit test questions
+    const test = new Test();
+    test.questions = req.body.questions;
+    test.id = req.body.test_id;
+
+    const test_modify = await test.modifyQuestions();
+    if(test_modify === 1 || test_modify === 2 || test_modify === -1){
+        return res.status(500).json({message:"Error at modify test!", code:5});
+    }
+
+    return res.status(200).json({message:"Test modified successfully!", code:0});
+});
 
 router.get('/view_tests', [auth,authClass], async (req,res) => {
     /* Used to view all tests that are part of this class*/
@@ -546,11 +584,107 @@ router.get('/view_test', [auth,authClass], async (req,res) => {
         return res.status(500).json({message:"Some error occurred", code:4});
     }
 
+    //extract owner name and id
+    const test_owner = new TestOwner();
+    const user = new User();
+    const owner = await test_owner.getAllById(userId=null, testId=test.id);
+    if(typeof(owner)==="object"){
+        await user.getSingle(email=null, id=owner[0].id_user);
+    }
+    console.log(user.email,owner[0].id_user, "test id:",test.id);
+    let email_owner;
+    user.email !==null ? email_owner=user.email : email_owner="not found";
     if(getTest === 0){
-        return res.status(200).json({message:"Test extarcted", code:0, questions:test.questions});
+        return res.status(200).json({message:"Test extarcted", code:0, questions:test.questions, owner:email_owner});
     }
 
     return res.status(500).json({message:"Error occurred!", code:5});
+});
+
+router.get('/scheduled_tests', [auth,authClass], async (req,res) => {
+    /* Will return all schedules and for every schedule will extarct test name and description*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+
+    //extarct schedules
+    const schedule = new Schedule();
+    const schedule_list = await schedule.getAllById(classId=req.class.id_class, testId=null);
+    if(schedule_list===false || schedule_list===-1 || schedule_list===-2){
+        return res.status(200).json({message:"No scheduled tests for this class", code:2});
+    }
+
+    //for this list extact test information (name and description)
+    const test = new Test();
+
+    await Promise.all(schedule_list.map( async (schedule_entry) => {
+        let s_res = await test.getByIdNoQuestions(testId=schedule_entry.id_test);
+        if( !(s_res===1 || s_res===2) ){///<this event should be logged
+            schedule_entry["name"]=test.name;
+            schedule_entry["description"]=test.description;
+        } else{}
+      }));
+      
+    return res.status(200).json({message:"Test schedules extarcted", code:0, schedules:schedule_list});
+
+});
+
+router.get('/get_test_to_solve', [auth,authClass], async (req,res) => {
+    /* Will return all data regarding test*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(req.class.role !== "student"){
+        res.status(403).json({message:"No authority to view this data", code:2});
+        return;
+    }
+    if(isNaN(Number(req.query.test_id))){
+        res.status(400).json({message:"Bad test id", code:3});
+        return;
+    }
+    //is this request in schedule? 
+    const schedule = new Schedule();
+    const schedule_info = await schedule.getAllById(classId=req.class.id_class, testId=req.query.test_id);
+    if(schedule_info===-1||schedule_info===-2||schedule_info===false){
+        console.log("Test schedule not found");
+        return res.status(400).json({message:"Test schedule not found", code:3});
+        
+    }
+    const startDate = new Date(schedule_info[0].date_time_start);
+    const today = new Date();
+    if(startDate > today){
+       return res.status(400).json({message:"Test out of schedule!", code:4});
+    }
+
+    //extarct information
+    const test = new Test();
+    const getTest = await test.getById(testId=req.query.test_id);
+    if(getTest === 1 || getTest===false || getTest===2){
+        return res.status(500).json({message:"Some error occurred", code:5});
+    }
+
+    let questions;
+    try{
+        questions = JSON.parse(test.questions);
+        //console.log(questions[0].answersList);
+        questions.map((question) => {
+            question["answersList"].map((answer) => {
+                answer["corect"]=undefined;
+            })
+        });
+    } catch(err){return res.status(500).json({message:"Error occurred!", code:6});}
+
+    //create a JWT for test solve
+    const token = jwt.sign({id_test:req.query.test_id }, process.env.JWT_PRIVATE_KEY);
+
+    return res.status(200).json({message:"Test extarcted", code:0, questions:questions, token:token});
+ 
 });
 
 module.exports = router;
