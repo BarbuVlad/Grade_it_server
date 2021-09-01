@@ -49,9 +49,12 @@ router.get('/feed', [auth],async (req,res,next) => {
   //-----------------
   //for every class, extract most recent posts
   const post = new Post();
+  const class_ = new Class();
   let posts = [];
   await Promise.all(sign_ups_list.map( async (sign_up_item) => {
     let p_raw = await post.getAllByClassId(sign_up_item.id_class, 10);///< should modify to limit by date not raw number of entries
+    //await class_.getById(classId=sign_up_item.id_class);
+    //class_.name;
     if( !(p_raw==false || p_raw==-1 || p_raw==-2) ){///<this event should be logged
       const p_list = await Promise.all(Object.values(JSON.parse(JSON.stringify(p_raw))));
       posts.push(...p_list);

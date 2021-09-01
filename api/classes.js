@@ -14,6 +14,8 @@ const { Test } = require('../models/Test_model');
 const { TestOwner } = require('../models/Test_owner_model');
 const { TestClass } = require('../models/Test_class_model');
 const { Schedule } = require('../models/Schedule_model');
+const { Answer } = require('../models/Answer_model');
+const { Result } = require('../models/Result_model');
 /*! Every Class instance will be named _class NOT class, as the latter is a reserved keyword*/
 
 /* GET routes */
@@ -685,6 +687,192 @@ router.get('/get_test_to_solve', [auth,authClass], async (req,res) => {
 
     return res.status(200).json({message:"Test extarcted", code:0, questions:questions, token:token});
  
+});
+
+router.post('/send_test_answers', [auth,authClass], async (req,res) => {
+    /* Will set a date for a test to take place
+    Expect date in format: 2021-09-24T12:13 */
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        //console.log(req.user, req.class);
+        return;
+    }
+    if(req.class.role !== "student"){
+        res.status(403).json({message:"No authority to modify this data", code:2});
+        return;
+    }
+    if(!req.body.answers || !req.body.token){
+       return res.status(400).json({message:"Data missing (start-end dates or test id)", code:3});
+    }
+    //verify token
+    let decodedToken;
+    try{
+        decodedToken = jwt.verify(req.body.token, process.env.JWT_PRIVATE_KEY);
+    } catch (err){
+        return res.status(401).json({message:"Bad test token", code:4});
+    }
+    //get token date time
+    let token_date = new Date(decodedToken.iat * 1000);
+    console.log(token_date);
+    //extarct test scheduled time
+    const schedule = new Schedule();
+    const scheduleEntry = await schedule.getAllById(classId=req.class.id_class, testId=decodedToken.id_test);
+    if (scheduleEntry===false || scheduleEntry===-2 || scheduleEntry===-1){
+        return res.status(500).json({message:"Cannot extract scheduled time!", code:5});
+    }
+    let startDate = new Date(scheduleEntry[0].date_time_start);
+    let endDate = new Date(scheduleEntry[0].date_time_end);
+    if(endDate>token_date>startDate){
+        return res.status(400).json({message:"Test out of time!", code:6});
+    }
+    
+    //save test answers
+    const answer = new Answer();
+    answer.id_test = decodedToken.id_test;
+    answer.id_user = req.class.id_user;
+    answer.date_time = new Date();
+    answer.answers = req.body.answers;
+    const create_answer = await answer.create();
+    //const create_answer = 0;
+
+    console.log("Create answer status code:", create_answer);
+    if(create_answer!==0){
+        return res.status(500).json({message:"Test answers could not be created!", code:7});
+    }
+    //>>>corect test and save results<<<
+     //read test questions 
+    const test = new Test();
+    await test.getById(testId=decodedToken.id_test);
+    let _questions = JSON.parse(test.questions);
+    let _answers = req.body.answers;
+    for(let i=0; i<_questions.length; i++){
+        if(_questions[i].type!=="text"){///<for checkbox and radiobuttons
+        _questions[i].answersList.map((answer,index_ans) => {
+            // console.log(answer, "-", _answers[i].answersList[index_ans]);
+            if(answer.corect===true && _answers[i].answersList[index_ans].selected===true){
+                //answer is corect -> add to answer
+                answer.selected=true;
+                answer.right=true;
+            } 
+            else if(answer.corect===true && _answers[i].answersList[index_ans].selected!==true){
+                //answer is wrong -> add to answer
+                answer.selected=false;
+                answer.right=false;
+            }
+            else if(answer.corect===false && _answers[i].answersList[index_ans].selected===true){
+                //answer is wrong -> add to answer
+                answer.selected=true;
+                answer.right=false;
+            }
+            else if(answer.corect===false && _answers[i].answersList[index_ans].selected!==true){
+                //answer is wrong -> add to answer
+                answer.selected=false;
+                answer.right=true;
+            }
+        });
+        }//if
+        else {//if(_questions[i]=="text")
+            _questions[i].answer=_answers[i].answer;
+        }
+    }
+    const result = new Result();
+    result.id_test = decodedToken.id_test;
+    result.id_user = req.class.id_user;
+    result.date_time = new Date();
+    result.results = _questions;
+
+    const create_result = await result.create();
+    if (create_result!==0){
+        return res.status(500).json({message:"Test results could not be generated!", code:8});
+    }
+
+    res.status(200).json({message:"Test answers sent and saved. Results generated", code:0});
+});
+
+router.get('/view_own_results', [auth,authClass], async (req,res) => {
+    /* Will return test results*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        return;
+    }
+    if(!req.query.test_id){
+        res.status(400).json({message:"Missing test id", code:2});
+    }
+    
+    //extarct results
+    const result = new Result();
+    test_result = await result.getAllById(userId=req.class.id_user, testId=req.query.test_id);
+    if(test_result===false || test_result===-1 || test_result===-2){
+        return res.status(200).json({message:"No results extracted", code:3});
+    }
+    console.log(test_result[0].results);
+    return res.status(200).json({message:"Test results extarcted", code:0, results:test_result[0].results, date:test_result[0].date_time});
+
+});
+
+router.get('/get_all_results', [auth,authClass], async (req,res) => {
+    /* Will return all schedules and for every schedule will extarct test name and description*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        return;
+    }
+    if(req.class.role !== "owner" && req.class.role !== "teacher"){
+        res.status(403).json({message:"No authority to view this data", code:2});
+        return;
+    }
+    if(isNaN(Number(req.query.test_id))){
+        res.status(400).json({message:"Bad test id", code:3});
+        return;
+    }
+
+
+    //extarct results for this test
+    const result = new Result();
+    const results_list = await result.getAllByIdNoResults(userId=null, testId=req.query.test_id);
+    if(results_list===false || results_list===-1 || results_list===-2){
+        return res.status(200).json({message:"No scheduled tests for this class", code:2});
+    }
+    //extract user name for every result
+    const user = new User();
+
+    await Promise.all(results_list.map( async (result_entry) => {
+        let r_res = await user.getSingle(email=null, id=result_entry["id_user"]);
+        if( !(r_res===-1 || r_res===false) ){///<this event should be logged
+            result_entry["email"]=user.email;
+        } else{}
+      }));
+      
+    return res.status(200).json({message:"Test results extarcted", code:0, results:results_list});
+
+});
+
+router.get('/view_user_results', [auth,authClass], async (req,res) => {
+    /* Will return test results*/
+    //sync tokens
+    if(req.user.id !== req.class.id_user){
+        res.status(400).json({message:"Authorization conflict error", code:1});
+        return;
+    }
+    if(req.class.role !== "owner" && req.class.role !== "teacher"){
+        res.status(403).json({message:"No authority to view this data", code:2});
+        return;
+    }
+    if(!req.query.test_id || !req.query.user_id){
+        res.status(400).json({message:"Missing test id or user id", code:3});
+    }
+    
+    //extarct results
+    const result = new Result();
+    test_result = await result.getAllById(userId=req.query.user_id, testId=req.query.test_id);
+    if(test_result===false || test_result===-1 || test_result===-2){
+        return res.status(200).json({message:"No results extracted", code:3});
+    }
+    console.log(test_result[0].results);
+    return res.status(200).json({message:"Test results extarcted", code:0, results:test_result[0].results, date:test_result[0].date_time});
+
 });
 
 module.exports = router;
